@@ -94,7 +94,9 @@ class Rocket(RigidBody):
 
 class SimpleAircraft(RigidBody):
     def __init__(self, model, CoM, pos, vel, accel, orient, ang_vel, ang_accel, mass, inertia,
-                 max_thrust, throttle_range, throttle, prop_mass, mass_flow, cross_sections, Cds, Cl, control_effectiveness):
+                 max_thrust, throttle_range, throttle, prop_mass, mass_flow,
+                 cross_sections, Cds, Cdas, angular_damping, Cl, 
+                 control_effectiveness):
         super(SimpleAircraft, self).__init__(model, CoM, pos, vel, accel, orient, ang_vel, ang_accel, mass, inertia)
         self.max_thrust = max_thrust
         self.throttle_range = throttle_range
@@ -103,10 +105,13 @@ class SimpleAircraft(RigidBody):
         self.mass_flow = mass_flow
         self.cross_sections = cross_sections
         self.Cds = Cds
+        self.Cdas = Cdas
+        self.angular_damping = angular_damping # this is for the complicated aero effects which I can not simulate using the single body model
         self.Cl = Cl
         self.control_effectiveness = control_effectiveness
 
         self.aero_resistance = np.multiply(self.cross_sections, self.Cds)
+        self.angular_resistance = np.multiply(self.cross_sections, self.Cdas)
 
         self.thrust = self.throttle / 100 * self.max_thrust
 
@@ -127,17 +132,23 @@ class SimpleAircraft(RigidBody):
         self.thrust = self.max_thrust * percentage / 100
 
     def apply_aero_torque(self):
-        if np.linalg.norm(self.vel):
-            torque_x = np.dot(self.orient[1], self.vel) * np.linalg.norm(self.vel)
-            torque_y = -np.dot(self.orient[0], self.vel) * np.linalg.norm(self.vel)
+        vel_mag = np.linalg.norm(self.vel)
+        if vel_mag:
+            torque_x = np.dot(self.orient[1], self.vel) * vel_mag * self.Cdas[0]
+            torque_y = -np.dot(self.orient[0], self.vel) * vel_mag * self.Cdas[1]
 
             self.apply_torque(np.array([torque_x, torque_y, 0]))
 
-    def apply_angular_drag(self):
+    def apply_angular_drag(self, dt):
         drag_vector = self.ang_vel * np.linalg.norm(self.ang_vel)
-        drag_multiplier = abs(np.dot(drag_vector, self.orient[0] * self.aero_resistance[1])) + abs(np.dot(drag_vector, self.orient[1] * self.aero_resistance[0])) + abs(np.dot(drag_vector, self.orient[2] * self.aero_resistance[2]))
+        drag_multiplier = abs(np.dot(drag_vector, self.orient[0] * self.angular_resistance[1])) + abs(np.dot(drag_vector, self.orient[1] * self.angular_resistance[0])) + abs(np.dot(drag_vector, self.orient[2] * self.angular_resistance[2]))
         drag_vector = -drag_vector * drag_multiplier**2
         self.apply_torque(drag_vector)
+
+        # this is placeholder for the complicated aero effects which I can not simulate using the single body model
+        self.ang_vel[0] = self.ang_vel[0] * (1 - self.angular_damping[0] * dt)
+        self.ang_vel[1] = self.ang_vel[1] * (1 - self.angular_damping[1] * dt)
+        self.ang_vel[2] = self.ang_vel[2] * (1 - self.angular_damping[2] * dt)
 
     def apply_lift(self):
         if np.linalg.norm(self.vel) > 0:

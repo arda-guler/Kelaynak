@@ -85,10 +85,12 @@ def main():
 
     cross_sections = np.array([8, 10, 2])            # m2
     Cds = np.array([0.6, 0.8, 0.1])
+    Cdas = np.array([8, 20, 45])
+    angular_damping = np.array([0.4, 0.8, 0.8])
     Cl = 1.2
     
     # aileron, elevator, rudder
-    control_effectiveness = np.array([0.6, 0.4, 0.15])
+    control_effectiveness = np.array([1.8, 1.8, 2.5])
     
     AP = SimpleAircraft(plane_model, init_CoM,
                         init_pos, init_vel, init_accel,
@@ -96,7 +98,8 @@ def main():
                         init_mass, init_inertia,
                         max_thrust, throttle_range, throttle,
                         prop_mass, mass_flow,
-                        cross_sections, Cds, Cl, control_effectiveness)
+                        cross_sections, Cds, Cdas, angular_damping, Cl,
+                        control_effectiveness)
     AP.set_thrust_percent(80)
 
     bodies = [AP]
@@ -209,11 +212,14 @@ def main():
 
     print("Starting...")
     dt = 0
+    ctrl_state = [0, 0, 0]
+    
+    velocity_conversion_factor = 1
+    altitude_conversion_factor = 1
+    
     while not glfw.window_should_close(window):
         t_cycle_start = time.perf_counter()
-        glfw.poll_events()
-
-        ctrl_state = [0, 0, 0]
+        glfw.poll_events() 
 
         # CONTROLS
         if kbd.is_pressed(cam_move_fwd):
@@ -243,36 +249,59 @@ def main():
             rotate_cam([0, 0, -cam_rot_speed * dt])
 
         if kbd.is_pressed(plane_pitch_up):
-            AP.elevator(1)
-            ctrl_state[1] = 1
+            ctrl_state[1] += 1 * dt
         elif kbd.is_pressed(plane_pitch_dn):
-            AP.elevator(-1)
-            ctrl_state[1] = -1
+            ctrl_state[1] -= 1 * dt
+        else:
+            if abs(ctrl_state[1]) > 0.3:
+                ctrl_state[1] *= 1 - 2 * dt
+            else:
+                ctrl_state[1] = 0
 
         if kbd.is_pressed(plane_roll_ccw):
-            AP.aileron(1)
-            ctrl_state[0] = 1
+            ctrl_state[0] += 1 * dt
         elif kbd.is_pressed(plane_roll_cw):
-            AP.aileron(-1)
-            ctrl_state[0] = -1
+            ctrl_state[0] -= 1 * dt
+        else:
+            if abs(ctrl_state[0]) > 0.3:
+                ctrl_state[0] *= 1 - 2 * dt
+            else:
+                ctrl_state[0] = 0
 
         if kbd.is_pressed(plane_yaw_right):
-            AP.rudder(1)
-            ctrl_state[2] = 1
+            ctrl_state[2] += 1 * dt
         elif kbd.is_pressed(plane_yaw_left):
-            AP.rudder(-1)
-            ctrl_state[2] = -1
+            ctrl_state[2] -= 1 * dt
+        else:
+            if abs(ctrl_state[2]) > 0.3:
+                ctrl_state[2] *= 1 - 2 * dt
+            else:
+                ctrl_state[2] = 0
 
         if kbd.is_pressed(plane_throttle_up):
             AP.update_throttle(30, dt)
         elif kbd.is_pressed(plane_throttle_dn):
             AP.update_throttle(-30, dt)
 
+        for i in range(len(ctrl_state)):
+            ctrl_state[i] = min(max(ctrl_state[i], -1), 1)
+
+        AP.aileron(ctrl_state[0])
+        AP.elevator(ctrl_state[1])
+        AP.rudder(ctrl_state[2])
+
+        if kbd.is_pressed("M"): # superior metric units for the superior people
+            velocity_conversion_factor = 1
+            altitude_conversion_factor = 1
+        elif kbd.is_pressed("N"): # inferior imperial units for Mars Climate Orbiter
+            velocity_conversion_factor = 1.943844 # knots
+            altitude_conversion_factor = 3.28084 # feet
+
         # PHYSICS
         
         AP.drain_fuel(dt)
         AP.apply_aero_torque()
-        AP.apply_angular_drag()
+        AP.apply_angular_drag(dt)
         AP.apply_drag()
         AP.apply_lift()
         AP.apply_thrust()
@@ -297,8 +326,8 @@ def main():
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         drawScene(main_cam, floor, bodies, scenery_objects, ctrl_state, first_person_ui)
         
-        alt_string = "Alt: " + str(int(AP.pos[1]))
-        vel_string = "Vel: " + str(int(np.linalg.norm(AP.vel)))
+        alt_string = "Alt: " + str(int(AP.pos[1] * altitude_conversion_factor))
+        vel_string = "Vel: " + str(int(np.linalg.norm(AP.vel) * velocity_conversion_factor))
         throttle_str = "Throttle: " + str(int(AP.throttle))
         AoA_str = "AOA: " + str(round(AoA, 2))
         G_str = "G: " + str(round(G, 2))

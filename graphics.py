@@ -187,6 +187,19 @@ def drawModel(model, pos, orient, scale, color=Color(1, 1, 1)):
         glVertex3f(v1_rot[0], v1_rot[1], v1_rot[2])
         glVertex3f(v2_rot[0], v2_rot[1], v2_rot[2])
     glEnd()
+
+    
+    for faces in model.faces:
+        glBegin(GL_POLYGON)
+        vnum = len(faces)
+        for i in range(vnum):
+            v = model.vertices[faces[i]]
+            v_rot = np.array([[v[0] * orient[0][0] + v[1] * orient[1][0] + v[2] * orient[2][0]],
+                              [v[0] * orient[0][1] + v[1] * orient[1][1] + v[2] * orient[2][1]],
+                              [v[0] * orient[0][2] + v[1] * orient[1][2] + v[2] * orient[2][2]]])
+
+            glVertex3f(v_rot[0], v_rot[1], v_rot[2])
+        glEnd()
     
     glPopMatrix()
 

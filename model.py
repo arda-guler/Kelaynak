@@ -3,7 +3,7 @@ import numpy as np
 class Model:
     def __init__(self, filepath):
         self.filepath = self.sanitize_filepath(filepath)
-        self.vertices, self.lines = self.read_model()
+        self.vertices, self.lines, self.faces = self.read_model()
 
     def sanitize_filepath(self, path):
         if not path.endswith(".mdl"):
@@ -20,6 +20,7 @@ class Model:
 
         vertices = []
         lines = []
+        faces = []
         for l in mlines:
             # vertices
             if l.startswith("V|"):
@@ -43,4 +44,17 @@ class Model:
 
                 lines.append([int(l[0]) - 1, int(l[1]) - 1])
 
-        return vertices, lines
+            # faces
+            elif l.startswith("F|"):
+                l = l[2:]
+                l = l.replace(" ", "")
+                l = l.replace("\n", "")
+                l = l.split(",")
+
+                new_face = []
+                for i in l:
+                    new_face.append(int(i) - 1)
+                    
+                faces.append(new_face)
+
+        return vertices, lines, faces
